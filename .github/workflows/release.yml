@@ -1,0 +1,127 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build, without the leading v (e.g. 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    env:
+      # Secrets cannot be read directly in `if:`, so surface their presence
+      # as plain booleans the steps can branch on.
+      HAS_SIGNING: ${{ secrets.MACOS_CERTIFICATE != '' }}
+      HAS_NOTARY: ${{ secrets.APPLE_ID != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building version ${VERSION}"
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Import signing certificate
+        if: env.HAS_SIGNING == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          echo "$MACOS_CERTIFICATE" | base64 --decode > /tmp/certificate.p12
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+
+          security import /tmp/certificate.p12 \
+            -k build.keychain \
+            -P "$MACOS_CERTIFICATE_PWD" \
+            -T /usr/bin/codesign
+
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+
+          rm -f /tmp/certificate.p12
+          security find-identity -v -p codesigning build.keychain
+
+      - name: Build, sign and package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SIGN_IDENTITY: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: ./Scripts/package.sh
+
+      - name: Verify the built app launches
+        run: |
+          # --diagnose exits immediately; proves the binary is not broken.
+          ./build/Brightness.app/Contents/MacOS/Brightness --diagnose
+
+      - name: Compose release notes
+        id: notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "## Brightness ${VERSION}"
+            echo
+            echo "Unlocks the HDR brightness headroom of Apple XDR displays for ordinary SDR content."
+            echo
+            echo "### Install"
+            echo
+            echo "Download the DMG, open it, and drag **Brightness** to Applications."
+            if [[ "${HAS_NOTARY}" != "true" ]]; then
+              echo
+              echo "> **This build is not notarised.** macOS Gatekeeper will refuse to open it"
+              echo "> on first launch. Right-click the app and choose **Open**, or run:"
+              echo '> ```'
+              echo '> xattr -dr com.apple.quarantine /Applications/Brightness.app'
+              echo '> ```'
+            fi
+            echo
+            echo "### Requirements"
+            echo
+            echo "- macOS 14 or later"
+            echo "- An XDR-capable display (MacBook Pro 14\"/16\" M1 Pro/Max or later, Pro Display XDR, Studio Display)"
+            echo
+            echo "Displays reporting no EDR headroom are detected and skipped."
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" \
+            build/Brightness-${VERSION}.dmg \
+            --title "Brightness ${VERSION}" \
+            --notes-file release-notes.md \
+            --verify-tag || \
+          gh release create "v${VERSION}" \
+            build/Brightness-${VERSION}.dmg \
+            --title "Brightness ${VERSION}" \
+            --notes-file release-notes.md

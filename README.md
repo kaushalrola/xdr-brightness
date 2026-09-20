@@ -162,6 +162,45 @@ Sources/Brightness/
   Core/     settings, diagnostics ring buffer, safety net, hotkeys
 ```
 
+## Releases
+
+Tagging a version builds, signs, notarises and publishes a DMG automatically:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+The workflow can also be run manually from the Actions tab.
+
+Packaging works locally too:
+
+```bash
+VERSION=1.0.0 ./Scripts/package.sh
+```
+
+### Signing secrets
+
+Without these the workflow still produces a working DMG, but it is only
+ad-hoc signed and Gatekeeper will block it on first launch. Users can work
+around that (`xattr -dr com.apple.quarantine`), but a notarised build is
+what makes the app installable by people who are not developers.
+
+| Secret | What it is |
+|---|---|
+| `MACOS_CERTIFICATE` | Developer ID Application `.p12`, base64 encoded |
+| `MACOS_CERTIFICATE_PWD` | Password for that `.p12` |
+| `MACOS_CERTIFICATE_NAME` | e.g. `Developer ID Application: Your Name (TEAMID)` |
+| `KEYCHAIN_PASSWORD` | Any throwaway string; unlocks the temporary CI keychain |
+| `APPLE_ID` | Apple ID used for notarisation |
+| `APPLE_TEAM_ID` | Your 10-character team ID |
+| `APPLE_APP_PASSWORD` | App-specific password, from appleid.apple.com |
+
+To produce the base64 certificate:
+
+```bash
+base64 -i DeveloperID.p12 | pbcopy
+```
+
 ## Licence
 
 MIT — see [LICENSE](LICENSE).
