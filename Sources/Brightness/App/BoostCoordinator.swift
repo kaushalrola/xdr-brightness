@@ -40,6 +40,7 @@ final class BoostCoordinator: ObservableObject {
     let calibrator = HeadroomCalibrator()
     let power = PowerPolicy()
     let conflicts = ConflictMonitor()
+    let videoMonitor = VideoPlaybackMonitor()
     private var overlayBackend: OverlayBackend!
     private var gammaBackend: GammaBackend!
 
@@ -77,6 +78,9 @@ final class BoostCoordinator: ObservableObject {
 
         power.onChange = { [weak self] in self?.reevaluate() }
         power.start()
+
+        videoMonitor.onChange = { [weak self] in self?.refreshStatus() }
+        videoMonitor.refresh(force: true)
 
         observeSleepWake()
 
@@ -217,13 +221,14 @@ final class BoostCoordinator: ObservableObject {
 
     private func tick() {
         power.refreshBattery()
+        videoMonitor.refresh()
 
         guard activeBackend.isActive else { return }
         activeBackend.poll()
 
         for display in registry.eligibleDisplays() {
             guard let screen = registry.screen(for: display.id) else { continue }
-            let userBrightness = Settings.shared.brightness(for: display.id)
+            let userBrightness = effectiveIntensity(for: display.id)
             let headroom = screen.currentHeadroom
             let state = states[display.id] ?? .engaging(since: Date())
 
@@ -273,6 +278,17 @@ final class BoostCoordinator: ObservableObject {
         refreshStatus()
     }
 
+    /// While video plays we hold the overlay open but drop the gain, so the
+    /// display keeps its unlocked headroom and HDR highlights render at full
+    /// range instead of being multiplied past the ceiling.
+    private var isBackingOffForVideo: Bool {
+        Settings.shared.backOffDuringVideo && videoMonitor.isPlaying
+    }
+
+    private func effectiveIntensity(for id: CGDirectDisplayID) -> Double {
+        isBackingOffForVideo ? Settings.shared.videoIntensity : Settings.shared.brightness(for: id)
+    }
+
     private func applyGain(display: BoostDisplay, headroom: Double, userBrightness: Double) {
         // Every ready tick teaches us a little more about this panel.
         calibrator.record(headroom, for: display.id)
@@ -320,6 +336,9 @@ final class BoostCoordinator: ObservableObject {
             text = "Asleep"
         } else if registry.eligibleDisplays().isEmpty {
             text = "No XDR display"
+        } else if readyCount > 0, isBackingOffForVideo {
+            let pct = Int((Settings.shared.videoIntensity * 100).rounded())
+            text = pct == 0 ? "Eased off for video" : "Eased off for video — \(pct)%"
         } else if readyCount > 0 {
             let values = readyDisplayIDs().map { Settings.shared.brightness(for: $0) }
             let percentages = Set(values.map { Int(($0 * 100).rounded()) })
@@ -366,7 +385,8 @@ final class BoostCoordinator: ObservableObject {
         out += "Backend: \(Settings.shared.backend.rawValue)\n"
         out += "Enabled: \(Settings.shared.isEnabled)  Default intensity: \(String(format: "%.2f", Settings.shared.defaultBrightness))\n"
         out += "On battery: \(power.isOnBattery)  Low power: \(power.isLowPower)\n"
-        out += "Conflicting apps: \(conflicts.conflictingApps().joined(separator: ", "))\n\n"
+        out += "Conflicting apps: \(conflicts.conflictingApps().joined(separator: ", "))\n"
+        out += "Video: \(videoMonitor.diagnostics)  back-off: \(Settings.shared.backOffDuringVideo) -> \(String(format: "%.2f", Settings.shared.videoIntensity))\n\n"
 
         out += "Displays:\n"
         for display in registry.displays {

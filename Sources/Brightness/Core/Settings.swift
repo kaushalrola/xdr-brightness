@@ -41,6 +41,8 @@ final class Settings: ObservableObject {
         static let onboarded         = "hasCompletedOnboarding"
         static let warnConflicts     = "warnOnConflicts"
         static let perDisplay        = "perDisplayBrightness"
+        static let backOffVideo      = "backOffDuringVideo"
+        static let videoIntensity    = "videoIntensity"
     }
 
     /// Fires after any change that affects boost output.
@@ -55,6 +57,8 @@ final class Settings: ObservableObject {
             Key.disableOnLowPower: true,
             Key.excluded: [String](),
             Key.perDisplay: [String: Double](),
+            Key.backOffVideo: true,
+            Key.videoIntensity: 0.0,
             Key.onboarded: false,
             Key.warnConflicts: true,
         ])
@@ -67,6 +71,8 @@ final class Settings: ObservableObject {
         _hasCompletedOnboarding = defaults.bool(forKey: Key.onboarded)
         _warnOnConflicts = defaults.bool(forKey: Key.warnConflicts)
         _perDisplayBrightness = (defaults.dictionary(forKey: Key.perDisplay) as? [String: Double]) ?? [:]
+        _backOffDuringVideo = defaults.bool(forKey: Key.backOffVideo)
+        _videoIntensity = defaults.double(forKey: Key.videoIntensity)
     }
 
     /// SwiftUI requires objectWillChange *before* the value changes.
@@ -176,6 +182,24 @@ final class Settings: ObservableObject {
     var warnOnConflicts: Bool {
         get { _warnOnConflicts }
         set { update { _warnOnConflicts = newValue; defaults.set(newValue, forKey: Key.warnConflicts) } }
+    }
+
+    /// Ease off while video is playing, so HDR highlights are not multiplied
+    /// past the panel's ceiling and clipped.
+    private var _backOffDuringVideo: Bool
+    var backOffDuringVideo: Bool {
+        get { _backOffDuringVideo }
+        set { update { _backOffDuringVideo = newValue; defaults.set(newValue, forKey: Key.backOffVideo) } }
+    }
+
+    /// Intensity used while video plays. 0 means no boost at all.
+    private var _videoIntensity: Double
+    var videoIntensity: Double {
+        get { _videoIntensity }
+        set {
+            let clamped = min(max(newValue, 0), 1)
+            update { _videoIntensity = clamped; defaults.set(clamped, forKey: Key.videoIntensity) }
+        }
     }
 
     func isExcluded(_ id: CGDirectDisplayID) -> Bool { excludedDisplays.contains(id) }

@@ -104,6 +104,25 @@ Trade-offs, disclosed in the UI: **clips HDR video**, competes with Night Shift
 and f.lux, and needs a drift watchdog because macOS silently resets the table on
 wake, reconfiguration, and brightness changes.
 
+### Video back-off
+
+Boosting multiplies HDR video along with everything else, pushing highlights
+past what the panel can actually show. When playback is detected the app drops
+the gain to a configurable level (no boost by default) while **keeping the
+overlay active**, so the display holds its unlocked headroom and the video
+itself renders across the full range.
+
+Detection uses the `PreventUserIdleDisplaySleep` power assertion that video
+players hold, read via `IOPMCopyAssertionsByProcess`. Assertions that merely
+mean "the user is active", and known keep-awake utilities, are filtered out.
+
+**This detects video playback, not HDR specifically.** macOS exposes no public
+per-process HDR signal — reported headroom saturates to the panel maximum as
+soon as any EDR content exists, including our own overlay, so there is no
+differential left to read. Backing off on all playback is the honest
+approximation, which is why it is a setting with an adjustable level rather
+than forced behaviour.
+
 ### Auto-calibration
 
 Rather than shipping a table of device models, the app measures each display's

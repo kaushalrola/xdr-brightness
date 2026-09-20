@@ -39,6 +39,37 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Video") {
+                Toggle("Ease off while video is playing", isOn: $settings.backOffDuringVideo)
+
+                if settings.backOffDuringVideo {
+                    VStack(alignment: .leading) {
+                        Slider(value: $settings.videoIntensity, in: 0...1) {
+                            Text("Intensity during video")
+                        }
+                        Text(settings.videoIntensity == 0
+                             ? "No boost while video plays."
+                             : "\(Int((settings.videoIntensity * 100).rounded()))% while video plays.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Text("Boosting multiplies HDR video too, pushing highlights past what the panel can show. Easing off keeps the extra headroom unlocked for the video itself.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text("macOS exposes no public signal for HDR specifically, so this detects video playback of any kind.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+
+                if coordinator.videoMonitor.isPlaying {
+                    Text("Playing now: \(coordinator.videoMonitor.holders.joined(separator: ", "))")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+
             Section("Startup") {
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, newValue in

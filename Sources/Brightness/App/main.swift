@@ -58,6 +58,19 @@ MainActor.assumeIsolated {
             }
             print("")
         }
+        print("=== Power ===")
+        let power = PowerPolicy()
+        power.start()
+        print("  on battery:  \(power.isOnBattery)")
+        print("  low power:   \(power.isLowPower)")
+        print("  suppressed:  \(power.shouldSuppressBoost)\(power.suppressionReason.map { " — \($0)" } ?? "")")
+        print("")
+
+        print("=== Playback detection ===")
+        print("  all display-wake assertions: \(VideoPlaybackMonitor.allDisplayAwakeHolders())")
+        print("  counted as playback:         \(VideoPlaybackMonitor.playbackHolders())")
+        print("  all assertions:")
+        for line in VideoPlaybackMonitor.assertionDetail() { print("    \(line)") }
         exit(0)
     }
 
