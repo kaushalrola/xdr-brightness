@@ -55,6 +55,9 @@ final class GammaBackend: BrightnessBackend {
     func setGain(_ gain: Double, for displayID: CGDirectDisplayID) {
         guard let table = captured[displayID] else { return }
         guard table.apply(to: displayID, gain: gain) else { return }
+        if abs((appliedGain[displayID] ?? 0) - gain) > 0.0005 {
+            log(String(format: "GammaBackend: display %u gain -> %.4f", displayID, gain))
+        }
         appliedGain[displayID] = gain
     }
 

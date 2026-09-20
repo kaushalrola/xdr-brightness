@@ -3,14 +3,15 @@ import AppKit
 /// Brightness slider hosted inside the status menu.
 final class SliderMenuItemView: NSView {
     private let slider = NSSlider()
-    private let label = NSTextField(labelWithString: "Intensity")
+    private let label = NSTextField(labelWithString: "")
     private let value = NSTextField(labelWithString: "100%")
     private let onChange: (Double) -> Void
 
-    init(initial: Double, onChange: @escaping (Double) -> Void) {
+    init(title: String, initial: Double, onChange: @escaping (Double) -> Void) {
         self.onChange = onChange
         super.init(frame: NSRect(x: 0, y: 0, width: 260, height: 54))
 
+        label.stringValue = title
         label.font = .menuFont(ofSize: 12)
         label.textColor = .secondaryLabelColor
 

@@ -221,10 +221,9 @@ final class BoostCoordinator: ObservableObject {
         guard activeBackend.isActive else { return }
         activeBackend.poll()
 
-        let userBrightness = Settings.shared.brightness
-
         for display in registry.eligibleDisplays() {
             guard let screen = registry.screen(for: display.id) else { continue }
+            let userBrightness = Settings.shared.brightness(for: display.id)
             let headroom = screen.currentHeadroom
             let state = states[display.id] ?? .engaging(since: Date())
 
@@ -303,6 +302,10 @@ final class BoostCoordinator: ObservableObject {
 
     // MARK: - Status
 
+    private func readyDisplayIDs() -> [CGDirectDisplayID] {
+        states.compactMap { $0.value == .ready ? $0.key : nil }
+    }
+
     private func refreshStatus() {
         let wasBoosting = isBoosting
         let readyCount = states.values.filter { $0 == .ready }.count
@@ -318,8 +321,20 @@ final class BoostCoordinator: ObservableObject {
         } else if registry.eligibleDisplays().isEmpty {
             text = "No XDR display"
         } else if readyCount > 0 {
-            let pct = Int((Settings.shared.brightness * 100).rounded())
-            text = readyCount > 1 ? "Boosting \(readyCount) displays — \(pct)%" : "Boosting — \(pct)%"
+            let values = readyDisplayIDs().map { Settings.shared.brightness(for: $0) }
+            let percentages = Set(values.map { Int(($0 * 100).rounded()) })
+
+            if let only = percentages.count == 1 ? percentages.first : nil {
+                text = readyCount > 1
+                    ? "Boosting \(readyCount) displays — \(only)%"
+                    : "Boosting — \(only)%"
+            } else {
+                // Displays are set to different intensities; a single number
+                // would be a lie, so show the range instead.
+                let low = percentages.min() ?? 0
+                let high = percentages.max() ?? 0
+                text = "Boosting \(readyCount) displays — \(low)–\(high)%"
+            }
         } else if states.values.contains(where: { if case .cooldown = $0 { return true } else { return false } }) {
             text = "Waiting to retry"
         } else if states.values.contains(.isolated) {
@@ -343,13 +358,13 @@ final class BoostCoordinator: ObservableObject {
     func nudgeBrightness(by delta: Double) {
         let settings = Settings.shared
         if !settings.isEnabled && delta > 0 { settings.isEnabled = true }
-        settings.brightness = min(max(settings.brightness + delta, 0), 1)
+        settings.nudgeBrightness(by: delta, for: registry.eligibleDisplays().map(\.id))
     }
 
     var diagnosticsReport: String {
         var out = "=== Brightness diagnostics ===\n"
         out += "Backend: \(Settings.shared.backend.rawValue)\n"
-        out += "Enabled: \(Settings.shared.isEnabled)  Brightness: \(String(format: "%.2f", Settings.shared.brightness))\n"
+        out += "Enabled: \(Settings.shared.isEnabled)  Default intensity: \(String(format: "%.2f", Settings.shared.defaultBrightness))\n"
         out += "On battery: \(power.isOnBattery)  Low power: \(power.isLowPower)\n"
         out += "Conflicting apps: \(conflicts.conflictingApps().joined(separator: ", "))\n\n"
 
@@ -360,11 +375,14 @@ final class BoostCoordinator: ObservableObject {
             let state = states[display.id]?.label ?? "-"
             let calibrated = calibrator.calibratedHeadroom(for: display.id)
             out += String(
-                format: "  %@ #%u builtin=%@ potential=%.2f current=%.3f calibrated=%.3f%@ maxGain=%.3fx state=%@\n",
+                format: "  %@ #%u builtin=%@ potential=%.2f current=%.3f calibrated=%.3f%@ maxGain=%.3fx intensity=%.2f%@ state=%@\n",
                 display.name, display.id, display.isBuiltin ? "yes" : "no",
                 display.potentialHeadroom, headroom, calibrated,
                 calibrator.hasObservation(for: display.id) ? "" : " (default)",
-                GainModel.maximumGain(calibratedHeadroom: calibrated), state
+                GainModel.maximumGain(calibratedHeadroom: calibrated),
+                Settings.shared.brightness(for: display.id),
+                Settings.shared.hasOwnBrightness(for: display.id) ? "" : " (default)",
+                state
             )
         }
 

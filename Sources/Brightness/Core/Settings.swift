@@ -40,6 +40,7 @@ final class Settings: ObservableObject {
         static let excluded          = "excludedDisplays"
         static let onboarded         = "hasCompletedOnboarding"
         static let warnConflicts     = "warnOnConflicts"
+        static let perDisplay        = "perDisplayBrightness"
     }
 
     /// Fires after any change that affects boost output.
@@ -53,6 +54,7 @@ final class Settings: ObservableObject {
             Key.disableOnBattery: false,
             Key.disableOnLowPower: true,
             Key.excluded: [String](),
+            Key.perDisplay: [String: Double](),
             Key.onboarded: false,
             Key.warnConflicts: true,
         ])
@@ -64,6 +66,7 @@ final class Settings: ObservableObject {
         _excludedDisplays = Set((defaults.array(forKey: Key.excluded) as? [String] ?? []).compactMap(UInt32.init))
         _hasCompletedOnboarding = defaults.bool(forKey: Key.onboarded)
         _warnOnConflicts = defaults.bool(forKey: Key.warnConflicts)
+        _perDisplayBrightness = (defaults.dictionary(forKey: Key.perDisplay) as? [String: Double]) ?? [:]
     }
 
     /// SwiftUI requires objectWillChange *before* the value changes.
@@ -79,13 +82,58 @@ final class Settings: ObservableObject {
         set { update { _isEnabled = newValue; defaults.set(newValue, forKey: Key.enabled) } }
     }
 
-    /// 0...1 user-facing intensity. 1.0 == the maximum this display model allows.
+    /// 0...1 intensity applied to displays with no value of their own, and to
+    /// any display connected from now on. 1.0 == the maximum that display allows.
+    ///
+    /// Persisted under the original "brightness" key so existing preferences
+    /// carry over.
     private var _brightness: Double
-    var brightness: Double {
+    var defaultBrightness: Double {
         get { _brightness }
         set {
             let clamped = min(max(newValue, 0), 1)
             update { _brightness = clamped; defaults.set(clamped, forKey: Key.brightness) }
+        }
+    }
+
+    /// Per-display overrides, keyed by display ID. Absent means "use the default".
+    private var _perDisplayBrightness: [String: Double]
+
+    func brightness(for id: CGDirectDisplayID) -> Double {
+        _perDisplayBrightness[String(id)] ?? _brightness
+    }
+
+    func hasOwnBrightness(for id: CGDirectDisplayID) -> Bool {
+        _perDisplayBrightness[String(id)] != nil
+    }
+
+    func setBrightness(_ value: Double, for id: CGDirectDisplayID) {
+        let clamped = min(max(value, 0), 1)
+        update {
+            _perDisplayBrightness[String(id)] = clamped
+            defaults.set(_perDisplayBrightness, forKey: Key.perDisplay)
+        }
+    }
+
+    /// Drop the override so this display follows `defaultBrightness` again.
+    func clearBrightness(for id: CGDirectDisplayID) {
+        guard _perDisplayBrightness[String(id)] != nil else { return }
+        update {
+            _perDisplayBrightness.removeValue(forKey: String(id))
+            defaults.set(_perDisplayBrightness, forKey: Key.perDisplay)
+        }
+    }
+
+    /// Nudge every given display, materialising an override for each so the
+    /// hotkeys behave predictably on mixed setups.
+    func nudgeBrightness(by delta: Double, for ids: [CGDirectDisplayID]) {
+        guard !ids.isEmpty else { return }
+        update {
+            for id in ids {
+                let current = _perDisplayBrightness[String(id)] ?? _brightness
+                _perDisplayBrightness[String(id)] = min(max(current + delta, 0), 1)
+            }
+            defaults.set(_perDisplayBrightness, forKey: Key.perDisplay)
         }
     }
 

@@ -36,8 +36,14 @@ final class OverlayBackend: BrightnessBackend {
         sync(to: displays)
     }
 
+    private var lastGain: [CGDirectDisplayID: Double] = [:]
+
     func setGain(_ gain: Double, for displayID: CGDirectDisplayID) {
         controllers[displayID]?.setGain(gain)
+        if abs((lastGain[displayID] ?? 0) - gain) > 0.0005 {
+            log(String(format: "OverlayBackend: display %u gain -> %.4f", displayID, gain))
+            lastGain[displayID] = gain
+        }
     }
 
     private func sync(to displays: [BoostDisplay]) {

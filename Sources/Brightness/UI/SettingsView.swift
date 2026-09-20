@@ -22,10 +22,10 @@ struct SettingsView: View {
                 Toggle("Enable brightness boost", isOn: $settings.isEnabled)
 
                 VStack(alignment: .leading) {
-                    Slider(value: $settings.brightness, in: 0...1) {
-                        Text("Intensity")
+                    Slider(value: $settings.defaultBrightness, in: 0...1) {
+                        Text("Default intensity")
                     }
-                    Text("\(Int((settings.brightness * 100).rounded()))% of the headroom your display reports")
+                    Text("\(Int((settings.defaultBrightness * 100).rounded()))% — used by displays without their own setting, and by any display you connect later. Set individual displays on the Displays tab.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -104,24 +104,53 @@ struct SettingsView: View {
         Form {
             Section {
                 ForEach(coordinator.registry.displays) { display in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(display.name)
-                            Text(displaySubtitle(display))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(display.name)
+                                Text(displaySubtitle(display))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if display.supportsEDR {
+                                Toggle("", isOn: Binding(
+                                    get: { !settings.isExcluded(display.id) },
+                                    set: { settings.setExcluded(!$0, for: display.id) }
+                                ))
+                                .labelsHidden()
+                            } else {
+                                Text("Unsupported").font(.caption).foregroundStyle(.secondary)
+                            }
                         }
-                        Spacer()
-                        if display.supportsEDR {
-                            Toggle("", isOn: Binding(
-                                get: { !settings.isExcluded(display.id) },
-                                set: { settings.setExcluded(!$0, for: display.id) }
-                            ))
-                            .labelsHidden()
-                        } else {
-                            Text("Unsupported").font(.caption).foregroundStyle(.secondary)
+
+                        if display.supportsEDR && !settings.isExcluded(display.id) {
+                            HStack(spacing: 8) {
+                                Slider(
+                                    value: Binding(
+                                        get: { settings.brightness(for: display.id) },
+                                        set: { settings.setBrightness($0, for: display.id) }
+                                    ),
+                                    in: 0...1
+                                )
+                                Text("\(Int((settings.brightness(for: display.id) * 100).rounded()))%")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 38, alignment: .trailing)
+
+                                if settings.hasOwnBrightness(for: display.id) {
+                                    Button {
+                                        settings.clearBrightness(for: display.id)
+                                    } label: {
+                                        Image(systemName: "arrow.uturn.backward")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Follow the default intensity again")
+                                }
+                            }
                         }
                     }
+                    .padding(.vertical, 2)
                 }
             }
 

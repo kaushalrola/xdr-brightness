@@ -6,7 +6,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let coordinator: BoostCoordinator
     private var cancellables = Set<AnyCancellable>()
-    private var sliderView: SliderMenuItemView?
 
     var onOpenSettings: (() -> Void)?
     var onOpenOnboarding: (() -> Void)?
@@ -64,14 +63,28 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         toggle.target = self
         menu.addItem(toggle)
 
-        // Slider
-        let sliderItem = NSMenuItem()
-        let view = SliderMenuItemView(initial: settings.brightness) { newValue in
-            MainActor.assumeIsolated { Settings.shared.brightness = newValue }
+        // One slider per boostable display, or a single unlabelled one when
+        // there is only the built-in panel.
+        let boostable = coordinator.registry.eligibleDisplays()
+        if boostable.isEmpty {
+            let item = NSMenuItem()
+            let view = SliderMenuItemView(title: "Intensity", initial: settings.defaultBrightness) { newValue in
+                MainActor.assumeIsolated { Settings.shared.defaultBrightness = newValue }
+            }
+            item.view = view
+            menu.addItem(item)
+        } else {
+            for display in boostable {
+                let id = display.id
+                let title = boostable.count == 1 ? "Intensity" : display.name
+                let item = NSMenuItem()
+                let view = SliderMenuItemView(title: title, initial: settings.brightness(for: id)) { newValue in
+                    MainActor.assumeIsolated { Settings.shared.setBrightness(newValue, for: id) }
+                }
+                item.view = view
+                menu.addItem(item)
+            }
         }
-        sliderView = view
-        sliderItem.view = view
-        menu.addItem(sliderItem)
 
         menu.addItem(.separator())
 

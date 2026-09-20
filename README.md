@@ -52,6 +52,18 @@ The app lives in the menu bar; there is no Dock icon.
 | Brighter | <kbd>Cmd</kbd><kbd>Opt</kbd><kbd>↑</kbd> |
 | Dimmer | <kbd>Cmd</kbd><kbd>Opt</kbd><kbd>↓</kbd> |
 
+### Per-display intensity
+
+Each display has its own intensity. With a single display the menu shows one
+slider; with several it shows one per display, labelled by name.
+
+Displays without an explicit setting follow the **default intensity** in
+Settings → General, which is also what any newly connected display starts at.
+Setting a slider creates an override for that display; the revert button on
+Settings → Displays drops it again.
+
+The hotkeys nudge every active display at once.
+
 ---
 
 ## How it works

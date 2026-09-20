@@ -33,6 +33,23 @@ MainActor.assumeIsolated {
                     GainModel.maximumGain(calibratedHeadroom: calibrated)
                 ))
             }
+            if screen.potentialHeadroom > 1.01 {
+                // Resolve intensity and gain through the same Settings and
+                // GainModel paths the running app uses.
+                let intensity = Settings.shared.brightness(for: id)
+                let own = Settings.shared.hasOwnBrightness(for: id)
+                let calibrated = HeadroomCalibrator().calibratedHeadroom(for: id)
+                let wouldApply = GainModel.gain(
+                    currentHeadroom: max(calibrated, screen.currentHeadroom),
+                    calibratedHeadroom: calibrated,
+                    userBrightness: intensity
+                )
+                print(String(
+                    format: "  intensity: %.2f (%@)\n  would use: %.3fx",
+                    intensity, own ? "own setting" : "default", wouldApply
+                ))
+            }
+
             if let table = GammaTable.capture(displayID: id) {
                 let end = table.endpoint
                 print(String(format: "  gamma top: %.4f, %.4f, %.4f%@",
