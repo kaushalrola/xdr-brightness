@@ -32,7 +32,7 @@ struct OnboardingView: View {
                 point(
                     icon: "film",
                     title: "HDR video",
-                    body: "The default Multiply Overlay method keeps HDR video intact. The Gamma Table method clips it to standard brightness."
+                    body: "Boost would otherwise push HDR highlights past what the panel can show, so it eases off on its own while video is playing. You can adjust how far, or turn it off, in Settings."
                 )
             }
 
